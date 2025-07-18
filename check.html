@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Search App with Gemini</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-file-upload {
+            border: 2px dashed #4a5568;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+        }
+        .custom-file-upload:hover {
+            background-color: #2d3748;
+            border-color: #6366f1;
+        }
+        #extracted-text-display mark {
+            background-color: #facc15;
+            color: #1f2937;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #6366f1;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 space-y-6">
+        
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-white">OCR Search App</h1>
+            <p class="text-gray-400 mt-2">Upload an image, extract text with Gemini, and search the results.</p>
+        </div>
+
+        <!-- API Key Input with Security Warning -->
+        <div class="bg-yellow-900/50 border border-yellow-600 text-yellow-200 px-4 py-3 rounded-lg" role="alert">
+            <p><strong class="font-bold">Security Warning:</strong> You shared your API key publicly. For your security, please <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline hover:text-yellow-100">go to your dashboard</a>, delete this key, and create a new one. Never share API keys publicly.</p>
+        </div>
+        <div>
+            <label for="apiKey" class="block text-sm font-medium text-gray-300 mb-2">Your Gemini API Key</label>
+            <input type="password" id="apiKey" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" value="AIzaSyA17TYUA-SKvSUhVPh9EtKZWWyPyVQOp08">
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Left Panel: Image Upload and Preview -->
+            <div class="space-y-4">
+                <h2 class="text-xl font-semibold text-white">1. Upload Image</h2>
+                <div id="image-upload-area" class="custom-file-upload rounded-lg">
+                    <input type="file" id="image-uploader" class="hidden" accept="image/png, image/jpeg, image/webp">
+                    <p id="upload-prompt" class="text-gray-400">Click or drag image here</p>
+                </div>
+                <div id="image-preview-container" class="hidden mt-4">
+                    <img id="image-preview" src="#" alt="Image Preview" class="max-w-full h-auto rounded-lg shadow-md">
+                </div>
+            </div>
+
+            <!-- Right Panel: Extracted Text and Search -->
+            <div class="space-y-4">
+                <h2 class="text-xl font-semibold text-white">2. Extracted Text</h2>
+                <div id="search-container" class="hidden">
+                    <input type="text" id="search-box" placeholder="Search extracted text..." class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div id="loader-container" class="hidden flex justify-center items-center h-48">
+                    <div class="loader"></div>
+                </div>
+                <div id="extracted-text-display" class="bg-gray-900/50 p-4 rounded-lg min-h-[200px] text-gray-300 whitespace-pre-wrap overflow-y-auto max-h-96">
+                    Text will appear here...
+                </div>
+            </div>
+        </div>
+        
+        <!-- Message/Error Box -->
+        <div id="message-box" class="hidden p-4 rounded-lg"></div>
+
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const imageUploader = document.getElementById('image-uploader');
+        const imageUploadArea = document.getElementById('image-upload-area');
+        const uploadPrompt = document.getElementById('upload-prompt');
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const extractedTextDisplay = document.getElementById('extracted-text-display');
+        const searchContainer = document.getElementById('search-container');
+        const searchBox = document.getElementById('search-box');
+        const loaderContainer = document.getElementById('loader-container');
+        const messageBox = document.getElementById('message-box');
+        const apiKeyInput = document.getElementById('apiKey');
+
+        let fullExtractedText = ''; // Store the original text
+
+        // --- Event Listeners ---
+
+        // Handle clicking the upload area
+        imageUploadArea.addEventListener('click', () => imageUploader.click());
+
+        // Handle file drag and drop
+        imageUploadArea.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            imageUploadArea.classList.add('bg-gray-700', 'border-indigo-500');
+        });
+        imageUploadArea.addEventListener('dragleave', (event) => {
+            event.preventDefault();
+            imageUploadArea.classList.remove('bg-gray-700', 'border-indigo-500');
+        });
+        imageUploadArea.addEventListener('drop', (event) => {
+            event.preventDefault();
+            imageUploadArea.classList.remove('bg-gray-700', 'border-indigo-500');
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                imageUploader.files = files;
+                handleImageUpload(files[0]);
+            }
+        });
+
+        // Handle file selection from the dialog
+        imageUploader.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                handleImageUpload(file);
+            }
+        });
+
+        // Handle search input
+        searchBox.addEventListener('keyup', handleSearch);
+
+        // --- Core Functions ---
+
+        /**
+         * Handles the selected image file, displays a preview, and initiates OCR.
+         * @param {File} file The image file selected by the user.
+         */
+        function handleImageUpload(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please upload a valid image file (PNG, JPG, etc.).', 'error');
+                return;
+            }
+
+            // Show image preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreviewContainer.classList.remove('hidden');
+                uploadPrompt.textContent = file.name; // Show filename
+            };
+            reader.readAsDataURL(file);
+
+            // Convert image to base64 for the API call
+            convertToBase64(file).then(base64Data => {
+                performOCR(base64Data, file.type);
+            }).catch(error => {
+                console.error("Base64 conversion error:", error);
+                showMessage('Could not process the image file.', 'error');
+            });
+        }
+
+        /**
+         * Converts a File object to a base64 encoded string.
+         * @param {File} file The file to convert.
+         * @returns {Promise<string>} A promise that resolves with the base64 string (without the data URI prefix).
+         */
+        function convertToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    // Result includes the data URI prefix, so we split and take the second part
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        /**
+         * Sends the image data to the Gemini API to perform OCR.
+         * @param {string} base64ImageData The base64 encoded image data.
+         * @param {string} mimeType The MIME type of the image (e.g., 'image/jpeg').
+         */
+        async function performOCR(base64ImageData, mimeType) {
+            const apiKey = apiKeyInput.value;
+            if (!apiKey) {
+                showMessage('Please enter your Gemini API key.', 'error');
+                return;
+            }
+
+            // Show loader and reset state
+            loaderContainer.classList.remove('hidden');
+            extractedTextDisplay.classList.add('hidden');
+            searchContainer.classList.add('hidden');
+            showMessage('', 'clear'); // Clear previous messages
+
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: "Extract all visible text from this image. Respond only with the extracted text. If no text is found, respond with '[NO TEXT FOUND]'." },
+                        {
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: base64ImageData
+                            }
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    temperature: 0.1, // Lower temperature for more deterministic text extraction
+                }
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error.message || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    fullExtractedText = result.candidates[0].content.parts[0].text;
+                    extractedTextDisplay.textContent = fullExtractedText;
+                    searchContainer.classList.remove('hidden');
+                } else {
+                    fullExtractedText = 'Could not extract text from the image.';
+                    extractedTextDisplay.textContent = fullExtractedText;
+                }
+
+            } catch (error) {
+                console.error('API Error:', error);
+                showMessage(`Error: ${error.message}. Check your API key and browser console.`, 'error');
+                fullExtractedText = 'An error occurred during text extraction.';
+                extractedTextDisplay.textContent = fullExtractedText;
+            } finally {
+                // Hide loader and show result display
+                loaderContainer.classList.add('hidden');
+                extractedTextDisplay.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Highlights search terms in the extracted text display.
+         */
+        function handleSearch() {
+            const query = searchBox.value.trim();
+            if (!query) {
+                // If search is cleared, show the original text without highlights
+                extractedTextDisplay.innerHTML = escapeHtml(fullExtractedText);
+                return;
+            }
+
+            // Use a regular expression to find all matches, case-insensitively
+            const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+            const highlightedText = escapeHtml(fullExtractedText).replace(regex, `<mark>$1</mark>`);
+            
+            extractedTextDisplay.innerHTML = highlightedText;
+        }
+
+        /**
+         * Displays a message to the user.
+         * @param {string} text The message to display.
+         * @param {'info'|'error'|'success'|'clear'} type The type of message.
+         */
+        function showMessage(text, type) {
+            messageBox.classList.remove('hidden', 'bg-red-900/50', 'border-red-600', 'text-red-200', 'bg-blue-900/50', 'border-blue-600', 'text-blue-200');
+            
+            if (type === 'clear') {
+                messageBox.classList.add('hidden');
+                return;
+            }
+
+            messageBox.textContent = text;
+            messageBox.classList.remove('hidden');
+
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-900/50', 'border-red-600', 'text-red-200');
+            } else { // 'info' or 'success'
+                messageBox.classList.add('bg-blue-900/50', 'border-blue-600', 'text-blue-200');
+            }
+        }
+        
+        // --- Utility Functions ---
+
+        /**
+         * Escapes HTML special characters to prevent XSS.
+         */
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        /**
+         * Escapes special characters in a string for use in a regular expression.
+         */
+        function escapeRegExp(string) {
+          return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+    </script>
+</body>
+</html>
