@@ -49,7 +49,7 @@ class Solution {
         return maxLen;
     }
 }
-public class leetcode_3401 {
+public class leetcode_3401 { 
     public static void main(String[] args) {
         Solution solution = new Solution();
         
