@@ -1,14 +1,14 @@
 import google.generativeai as genai
 
 # Your new API key is configured here
-api_key = "GENAI_API_KEY"
+api_key = "AIzaSyA17TYUA-SKvSUhVPh9EtKZWWyPyVQOp08"
 genai.configure(api_key=api_key)
 
 # We will use the fast and efficient gemini-1.5-flash model
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# This is your question to the AI
-prompt = "when will the kalki avatar come?"
+# This isuse sprin your question to the AI
+prompt = "how to spring and spring boot framework works and build an application using it?"
 
 # Send the prompt to the model and get a response
 print("Sending your request to the Gemini API...")
