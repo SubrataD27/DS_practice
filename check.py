@@ -8,7 +8,7 @@ genai.configure(api_key=api_key)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 # This isuse sprin your question to the AI
-prompt = "how to spring and spring boot framework works and build an application using it?"
+prompt = "GIVE ME THE LLAMA 2 7B MODEL IN PYTHON CODE, "
 
 # Send the prompt to the model and get a response
 print("Sending your request to the Gemini API...")
